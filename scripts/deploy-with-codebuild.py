@@ -145,6 +145,38 @@ def get_stack_outputs(stack_name: str) -> Dict[str, str]:
     return {o["OutputKey"]: o["OutputValue"] for o in outputs}
 
 
+def download_diagram(bucket_name: str) -> None:
+    """
+    Download the cdk-dia architecture diagram from the source bucket.
+
+    The diagram is rendered in the CodeBuild post_build phase and uploaded to
+    the source bucket. This pulls it to docs/architecture-diagram/ locally
+    before teardown removes the bucket. Best-effort; never raises.
+
+    Args:
+        bucket_name: Name of the source bucket holding the diagram
+    """
+    dest_dir = Path(__file__).parent.parent / "docs" / "architecture-diagram"
+    dest = dest_dir / "cdk-dia-diagram.png"
+    try:
+        run_command(
+            [
+                "aws",
+                "s3",
+                "cp",
+                f"s3://{bucket_name}/cdk-dia-diagram.png",
+                str(dest),
+                "--no-progress",
+            ]
+        )
+        log_success(f"Architecture diagram saved to: {dest}")
+    except subprocess.CalledProcessError:
+        log_warn(
+            "Could not download the cdk-dia diagram (rendering may have been "
+            "skipped). The deployment itself was unaffected."
+        )
+
+
 # --- Source packaging ---
 
 
@@ -496,7 +528,12 @@ def get_or_create_codebuild_project(
         stack_name: CDK stack name base (passed as env var)
         region: AWS region
     """
-    # Define buildspec once for both create and update paths
+    # Define buildspec once for both create and update paths.
+    #
+    # The diagram steps (graphviz + cdk-dia) are all suffixed with `|| true`
+    # so that a rendering failure can never fail the actual deployment. The
+    # resulting PNG is uploaded to the source bucket, from which the local
+    # script downloads it before teardown removes the bucket.
     buildspec: str = (
         "version: 0.2\n"
         "phases:\n"
@@ -506,6 +543,8 @@ def get_or_create_codebuild_project(
         "      nodejs: 20\n"
         "    commands:\n"
         "      - npm install -g aws-cdk\n"
+        "      - npm install -g cdk-dia || true\n"
+        "      - (yum install -y graphviz || dnf install -y graphviz) || true\n"
         "      - cd $CODEBUILD_SRC_DIR/infra-cdk && npm ci\n"
         "  build:\n"
         "    commands:\n"
@@ -515,6 +554,9 @@ def get_or_create_codebuild_project(
         "  post_build:\n"
         "    commands:\n"
         "      - cd $CODEBUILD_SRC_DIR && python scripts/deploy-frontend.py\n"
+        '      - echo "Rendering architecture diagram with cdk-dia..."\n'
+        "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk-dia --target-path /tmp/cdk-dia-diagram.png || true\n"
+        f"      - aws s3 cp /tmp/cdk-dia-diagram.png s3://{bucket_name}/cdk-dia-diagram.png || true\n"
     )
 
     # Check if project already exists
@@ -969,6 +1011,10 @@ def main() -> int:
                 log_success(f"App URL: {app_url}")
         except (subprocess.CalledProcessError, ValueError):
             log_info("Could not retrieve App URL - check the AWS console")
+
+        # Download the cdk-dia architecture diagram (best-effort) before the
+        # source bucket is torn down below.
+        download_diagram(bucket_name=source_bucket)
 
         # Success: remove all build resources, leaving zero footprint.
         print()
