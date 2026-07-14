@@ -55,6 +55,12 @@ export interface AppConfig {
      * Maps to the relevance_score parameter of RetrievalConfig. Defaults to 0.3.
      */
     ltm_relevance_score: number
+    /**
+     * Deploy a Bedrock Knowledge Base (RAG) + structured DynamoDB table seeded
+     * from mock-data/ at deploy time, and expose retrieval tools to the agent.
+     * Defaults to false so it does not affect deployments that don't need it.
+     */
+    use_knowledge_base: boolean
   }
 }
 
@@ -149,6 +155,7 @@ export class ConfigManager {
           use_long_term_memory: parsedConfig.backend?.use_long_term_memory === true,
           ltm_top_k: parsedConfig.backend?.ltm_top_k ?? 10,
           ltm_relevance_score: parsedConfig.backend?.ltm_relevance_score ?? 0.3,
+          use_knowledge_base: parsedConfig.backend?.use_knowledge_base === true,
         },
       }
     } catch (error) {

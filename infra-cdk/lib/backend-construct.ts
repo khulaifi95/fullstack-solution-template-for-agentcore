@@ -16,6 +16,7 @@ import * as cr from "aws-cdk-lib/custom-resources"
 import { Construct } from "constructs"
 import { AppConfig } from "./utils/config-manager"
 import { AgentCoreRole } from "./utils/agentcore-role"
+import { KnowledgeBaseConstruct } from "./knowledge-base-construct"
 import * as path from "path"
 import * as fs from "fs"
 
@@ -41,6 +42,7 @@ export class BackendConstruct extends Construct {
   private machineClientSecret: secretsmanager.Secret
   private runtimeCredentialProvider: cdk.CustomResource
   private agentRuntime: agentcore.Runtime
+  private knowledgeBase?: KnowledgeBaseConstruct
 
   constructor(scope: Construct, id: string, props: BackendConstructProps) {
     super(scope, id)
@@ -82,6 +84,15 @@ export class BackendConstruct extends Construct {
 
     // Create AgentCore Gateway (before Runtime)
     this.createAgentCoreGateway(props.config)
+
+    // Optionally create the Knowledge Base + structured data table (before the
+    // Runtime, so the runtime can receive the KB id / table name as env vars).
+    if (props.config.backend.use_knowledge_base) {
+      this.knowledgeBase = new KnowledgeBaseConstruct(this, "KnowledgeBase", {
+        stackNameBase: props.config.stack_name_base,
+        repoRoot: path.resolve(__dirname, "..", ".."), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+      })
+    }
 
     // Create AgentCore Runtime resources
     this.createAgentCoreRuntime(props.config)
@@ -386,6 +397,26 @@ export class BackendConstruct extends Construct {
     // Add claude-agent-sdk specific environment variable
     if (pattern === "claude-agent-sdk-single-agent" || pattern === "claude-agent-sdk-multi-agent") {
       envVars["CLAUDE_CODE_USE_BEDROCK"] = "1"
+    }
+
+    // Knowledge Base (RAG) wiring — only present when use_knowledge_base is true.
+    // The agent registers its retrieval tools based on these env vars, and the
+    // agent role is granted the corresponding read permissions.
+    if (this.knowledgeBase) {
+      envVars["KNOWLEDGE_BASE_ID"] = this.knowledgeBase.knowledgeBaseId
+      envVars["STRUCTURED_TABLE_NAME"] = this.knowledgeBase.structuredTable.tableName
+
+      agentRole.addToPolicy(
+        new iam.PolicyStatement({
+          sid: "KnowledgeBaseRetrieve",
+          effect: iam.Effect.ALLOW,
+          actions: ["bedrock:Retrieve"],
+          resources: [
+            `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${this.knowledgeBase.knowledgeBaseId}`,
+          ],
+        })
+      )
+      this.knowledgeBase.structuredTable.grantReadData(agentRole)
     }
 
     // Create the runtime using L2 construct

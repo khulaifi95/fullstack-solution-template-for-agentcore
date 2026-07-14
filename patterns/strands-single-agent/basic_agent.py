@@ -18,13 +18,26 @@ from tools.gateway import create_gateway_mcp_client
 from utils.auth import extract_user_id_from_context
 
 from tools.code_interpreter import StrandsCodeInterpreterTools
+from tools.knowledge_base import search_knowledge_base
+from tools.structured_data import query_structured_data
 
 logger = logging.getLogger(__name__)
 
 app = BedrockAgentCoreApp()
 
 SYSTEM_PROMPT = (
-    "You are a helpful assistant with access to tools via the Gateway and Code Interpreter. "
+    "You are a helpful assistant for the Housing, Construction & Sustainability "
+    "Authority (HCSA/HDB). You have access to tools via the Gateway and Code "
+    "Interpreter, and—when configured—a document knowledge base and structured "
+    "datasets.\n\n"
+    "When a knowledge base tool is available, use `search_knowledge_base` for "
+    "questions answerable from policies, SOPs, emails, or reports, and ALWAYS "
+    "cite the source document(s) for facts you draw from it. Use "
+    "`query_structured_data` for questions about contractors, development "
+    "projects, permits, or inspections (counts, statuses, ratings, costs, joins). "
+    "Some questions need both — retrieve from documents AND query the structured "
+    "data, then combine the answer. If a tool returns no relevant results, say so "
+    "rather than guessing.\n\n"
     "When asked about your tools, list them and explain what they do."
 )
 
@@ -95,10 +108,19 @@ def create_strands_agent(user_id: str, session_id: str) -> Agent:
 
     gateway_client = create_gateway_mcp_client(user_id)
 
+    tools = [gateway_client, code_tools.execute_python_securely]
+
+    # RAG tools are opt-in: only register them when the KB/table were deployed
+    # (env vars set by the CDK backend construct when use_knowledge_base is true).
+    if os.environ.get("KNOWLEDGE_BASE_ID"):
+        tools.append(search_knowledge_base)
+    if os.environ.get("STRUCTURED_TABLE_NAME"):
+        tools.append(query_structured_data)
+
     return Agent(
         name="strands_agent",
         system_prompt=SYSTEM_PROMPT,
-        tools=[gateway_client, code_tools.execute_python_securely],
+        tools=tools,
         model=bedrock_model,
         session_manager=session_manager,
         trace_attributes={"user.id": user_id, "session.id": session_id},

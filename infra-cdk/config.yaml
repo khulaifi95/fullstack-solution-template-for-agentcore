@@ -24,6 +24,12 @@ backend:
   ltm_top_k: 10             # Number of facts to retrieve per turn (default: 10)
   ltm_relevance_score: 0.3  # Minimum similarity threshold for retrieval (default: 0.3)
 
+  # Deploy a Bedrock Knowledge Base (RAG) + structured DynamoDB table, both
+  # seeded from mock-data/ at deploy time, and expose retrieval tools to the
+  # agent. Uses S3 Vectors (cheap managed vector store) + Titan embeddings, with
+  # multimodal FM parsing for scanned PDFs. Default false. See docs/KNOWLEDGE_BASE.md.
+  use_knowledge_base: true
+
   # VPC configuration - required when network_mode is VPC
   # Your VPC must have the necessary VPC endpoints for AWS services.
   # See docs/DEPLOYMENT.md for the full list of required VPC endpoints.
