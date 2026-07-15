@@ -36,6 +36,7 @@ export interface KnowledgeBaseConstructProps {
 export class KnowledgeBaseConstruct extends Construct {
   public readonly knowledgeBaseId: string
   public readonly structuredTable: dynamodb.Table
+  public readonly sourceBucket: s3.Bucket
 
   constructor(scope: Construct, id: string, props: KnowledgeBaseConstructProps) {
     super(scope, id)
@@ -52,6 +53,7 @@ export class KnowledgeBaseConstruct extends Construct {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
     })
+    this.sourceBucket = sourceBucket
 
     new s3deploy.BucketDeployment(this, "KbSourceDeployment", {
       sources: [s3deploy.Source.asset(path.join(props.repoRoot, "mock-data"))],

@@ -405,6 +405,9 @@ export class BackendConstruct extends Construct {
     if (this.knowledgeBase) {
       envVars["KNOWLEDGE_BASE_ID"] = this.knowledgeBase.knowledgeBaseId
       envVars["STRUCTURED_TABLE_NAME"] = this.knowledgeBase.structuredTable.tableName
+      // Bucket holding the source PDFs — the agent presigns object URLs from it
+      // so retrieval citations become clickable reference links.
+      envVars["KB_SOURCE_BUCKET"] = this.knowledgeBase.sourceBucket.bucketName
 
       agentRole.addToPolicy(
         new iam.PolicyStatement({
@@ -417,6 +420,8 @@ export class BackendConstruct extends Construct {
         })
       )
       this.knowledgeBase.structuredTable.grantReadData(agentRole)
+      // Read access so the agent can generate presigned links to cited PDFs.
+      this.knowledgeBase.sourceBucket.grantRead(agentRole)
     }
 
     // Create the runtime using L2 construct

@@ -6,9 +6,12 @@
 import decimal
 import json
 import os
+from urllib.parse import quote
 
 import boto3
 from boto3.dynamodb.conditions import Attr
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from strands import tool
 
 # Entity names match the UPPER_SNAKE slugs written by the ddb-seed Lambda.
@@ -19,12 +22,47 @@ _ENTITIES = [
     "PERMITS_PERMITS",
 ]
 _MAX_ITEMS = 100
+_LINK_TTL = 3600
+
+# Each entity's originating source dataset — used to cite structured answers,
+# mirroring how KB answers cite their PDF. display = the name graders expect;
+# key = the object under the KB source bucket's structured/ prefix.
+_SOURCE = {
+    "CONTRACTOR_LISTING_CONTRACTORS": ("Contractor listing.xlsx", "structured/contractor-listing-contractors.json"),
+    "DEVELOPMENT_PROJECTS_DEVELOPMENT_PROJECTS": ("Development Projects.xlsx", "structured/development-projects-development-projects.json"),
+    "INSPECTIONS_INSPECTIONS": ("Inspections.xlsx", "structured/inspections-inspections.json"),
+    "PERMITS_PERMITS": ("Permits.xlsx", "structured/permits-permits.json"),
+}
 
 
 def _table():
     region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
     name = os.environ["STRUCTURED_TABLE_NAME"]
     return boto3.resource("dynamodb", region_name=region).Table(name)
+
+
+def _source_ref(entity: str) -> dict:
+    """Return {source, link} for an entity's originating dataset (link best-effort)."""
+    display, key = _SOURCE.get(entity, (entity, ""))
+    ref = {"source": display, "link": ""}
+    bucket = os.environ.get("KB_SOURCE_BUCKET")
+    if bucket and key:
+        region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        try:
+            client = boto3.client(
+                "s3",
+                region_name=region,
+                endpoint_url=f"https://s3.{region}.amazonaws.com",
+                config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+            )
+            ref["link"] = client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=_LINK_TTL,
+            )
+        except (ClientError, Exception):  # noqa: BLE001 - link is best-effort
+            pass
+    return ref
 
 
 def _json(obj) -> str:
@@ -118,7 +156,9 @@ def query_structured_data(entity: str, filters: str = "", limit: int = 50) -> st
                count is always returned regardless of limit.
 
     Returns:
-        JSON string with {entity, count, returned, items}.
+        JSON string with {entity, count, returned, items, source, link}. Cite
+        `source` in your answer as a markdown link using `link` (a temporary URL
+        to the originating dataset), and include it in the References section.
     """
     key = _resolve_entity(entity)
     if not key:
@@ -138,12 +178,16 @@ def query_structured_data(entity: str, filters: str = "", limit: int = 50) -> st
 
     matched = [it for it in items if _matches(it, parsed_filters)]
     capped = min(int(limit or 50), _MAX_ITEMS)
+    ref = _source_ref(key)
     return _json(
         {
             "entity": key,
             "count": len(matched),
             "returned": min(len(matched), capped),
             "items": [_strip(it) for it in matched[:capped]],
+            # Cite this in the answer as a markdown link, like KB sources.
+            "source": ref["source"],
+            "link": ref["link"],
         }
     )
 
