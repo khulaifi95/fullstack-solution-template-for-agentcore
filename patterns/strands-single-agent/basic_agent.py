@@ -19,7 +19,7 @@ from utils.auth import extract_user_id_from_context
 
 from tools.code_interpreter import StrandsCodeInterpreterTools
 from tools.knowledge_base import search_knowledge_base
-from tools.structured_data import query_structured_data
+from tools.structured_data import describe_structured_data, query_structured_data
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,12 @@ SYSTEM_PROMPT = (
     "cite the source document(s) for facts you draw from it. Use "
     "`query_structured_data` for questions about contractors, development "
     "projects, permits, or inspections (counts, statuses, ratings, costs, joins). "
+    "When a structured-data question uses fuzzy or natural wording (e.g. "
+    "'troubled contractors', 'overdue permits', 'top builders'), FIRST call "
+    "`describe_structured_data` to see the real column names and their exact "
+    "allowed values, then map the question to precise filters — a filter value "
+    "can be a list to match several values at once (e.g. "
+    "{\"Financial Health Rating\": [\"UNDER_REVIEW\", \"FAIR\"]}). "
     "Some questions need both — retrieve from documents AND query the structured "
     "data, then combine the answer. If a tool returns no relevant results, say so "
     "rather than guessing.\n\n"
@@ -115,6 +121,7 @@ def create_strands_agent(user_id: str, session_id: str) -> Agent:
     if os.environ.get("KNOWLEDGE_BASE_ID"):
         tools.append(search_knowledge_base)
     if os.environ.get("STRUCTURED_TABLE_NAME"):
+        tools.append(describe_structured_data)
         tools.append(query_structured_data)
 
     return Agent(

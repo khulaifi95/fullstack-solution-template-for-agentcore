@@ -36,6 +36,63 @@ def _json(obj) -> str:
     return json.dumps(obj, default=default)
 
 
+# Categorical columns are those with few distinct values; used by
+# describe_structured_data to surface the enum vocabulary for NL mapping.
+_MAX_CARDINALITY_FOR_ENUM = 25
+
+
+@tool
+def describe_structured_data(entity: str = "") -> str:
+    """Describe the schema of the structured HCSA/HDB datasets for query planning.
+
+    Call this FIRST when a question uses fuzzy or natural wording (e.g. "troubled
+    contractors", "overdue permits", "poorly rated builders") so you can map it to
+    the real column names and their exact allowed values before querying. Returns,
+    per entity, the list of columns and — for low-cardinality (categorical) columns —
+    the distinct values that actually occur in the data.
+
+    Args:
+        entity: Optional — one of CONTRACTORS, PROJECTS, PERMITS, INSPECTIONS.
+                Omit to describe all four.
+
+    Returns:
+        JSON string: {entities: {ENTITY: {row_count, columns, categoricals: {col: [values]}}}}.
+    """
+    targets = _ENTITIES
+    if entity:
+        key = _resolve_entity(entity)
+        if not key:
+            return _json({"error": f"Unknown entity '{entity}'. Use CONTRACTORS, PROJECTS, PERMITS, INSPECTIONS."})
+        targets = [key]
+
+    out = {}
+    for ent in targets:
+        try:
+            items = _query_entity(ent)
+        except Exception as exc:  # noqa: BLE001
+            out[ent] = {"error": str(exc)}
+            continue
+        columns = set()
+        values_by_col = {}
+        for it in items:
+            for col, val in _strip(it).items():
+                columns.add(col)
+                values_by_col.setdefault(col, set()).add(str(val).strip())
+        # Drop empty / null-ish placeholders so the agent sees clean vocabulary.
+        _skip = {"", "none", "nan", "null"}
+        categoricals = {}
+        for col, vals in values_by_col.items():
+            clean = sorted(v for v in vals if v and v.strip().lower() not in _skip)
+            if 1 < len(clean) <= _MAX_CARDINALITY_FOR_ENUM:
+                categoricals[col] = clean
+        out[ent] = {
+            "row_count": len(items),
+            "columns": sorted(columns),
+            "categoricals": categoricals,
+        }
+    return _json({"entities": out})
+
+
 @tool
 def query_structured_data(entity: str, filters: str = "", limit: int = 50) -> str:
     """Query the structured HCSA/HDB datasets (contractors, projects, permits, inspections).
@@ -44,10 +101,19 @@ def query_structured_data(entity: str, filters: str = "", limit: int = 50) -> st
     costs, dates, or joining projects to their permits/inspections/contractors.
     Available entities: 'CONTRACTORS', 'PROJECTS', 'PERMITS', 'INSPECTIONS'.
 
+    For fuzzy/natural-language questions, first call `describe_structured_data`
+    to learn the exact column names and allowed values, then translate the
+    question into precise filters here. A filter value may be a single string OR
+    a list of strings (matches ANY — logical OR), which lets you map a fuzzy term
+    to several exact values, e.g. "troubled contractors" ->
+    {"Financial Health Rating": ["UNDER_REVIEW", "FAIR"]}.
+
     Args:
         entity: Which dataset to query — one of CONTRACTORS, PROJECTS, PERMITS, INSPECTIONS.
-        filters: Optional JSON object of {column: value} to match (case-insensitive
-                 substring match on string columns). Example: '{"Engagement Status": "SUSPENDED"}'.
+        filters: Optional JSON object of {column: value | [values]}. String values match
+                 case-insensitively (substring); a list matches ANY of its values.
+                 Example: '{"Engagement Status": "SUSPENDED"}' or
+                 '{"Contractor Rating": ["GOLD", "PLATINUM"]}'.
         limit: Max records to return (default 50, capped at 100). The total match
                count is always returned regardless of limit.
 
@@ -120,6 +186,7 @@ def _query_entity(entity: str):
 
 
 def _matches(item, filters) -> bool:
+    """AND across columns; a list value means OR across its options (substring, case-insensitive)."""
     for col, val in filters.items():
         actual = item.get(col)
         if actual is None:
@@ -127,7 +194,9 @@ def _matches(item, filters) -> bool:
             actual = next((v for k, v in item.items() if k.lower() == str(col).lower()), None)
         if actual is None:
             return False
-        if str(val).strip().lower() not in str(actual).strip().lower():
+        haystack = str(actual).strip().lower()
+        options = val if isinstance(val, list) else [val]
+        if not any(str(opt).strip().lower() in haystack for opt in options):
             return False
     return True
 
