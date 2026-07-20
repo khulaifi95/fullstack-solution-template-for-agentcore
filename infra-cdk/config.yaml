@@ -49,7 +49,9 @@ knowledge_base:
   max_tokens: 300                         # child chunk size (HIERARCHICAL) / chunk size (FIXED_SIZE)
   overlap_percentage: 20                  # FIXED_SIZE overlap %
   advanced_parsing: true                  # FM-based parsing so report tables survive chunking
-  # parsing_model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  # parsing_model: anthropic.claude-sonnet-4-5-20250929-v1:0  # Bedrock id, wrapped in a US inference profile (us.<id>).
+  #                                                           # Default = Sonnet 4.5. For Sonnet 5, confirm the exact id via
+  #                                                           # `aws bedrock list-inference-profiles --region <region> | grep sonnet-5`
 
 # Structured retrieval lane (Glue Data Catalog + Athena text-to-SQL) over the four
 # Parquet datasets staged by scripts/ingest_hdb.py.

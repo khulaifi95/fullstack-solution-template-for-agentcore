@@ -244,7 +244,13 @@ export class ConfigManager {
       max_tokens: kb.max_tokens ?? 300,
       overlap_percentage: kb.overlap_percentage ?? 20,
       advanced_parsing: kb.advanced_parsing !== false,
-      parsing_model: kb.parsing_model || "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      // Classic Bedrock foundation-model id (dated + versioned) — the construct
+      // wraps it in a US cross-region inference profile (us.<id>). Defaults to the
+      // verified-working Sonnet 4.5 id that FAST already uses. To use Sonnet 5,
+      // confirm its exact Bedrock id/version first:
+      //   aws bedrock list-inference-profiles --region <region> | grep sonnet-5
+      // then set parsing_model to e.g. anthropic.claude-sonnet-5-<date>-v1:0.
+      parsing_model: kb.parsing_model || "anthropic.claude-sonnet-4-5-20250929-v1:0",
     }
   }
 

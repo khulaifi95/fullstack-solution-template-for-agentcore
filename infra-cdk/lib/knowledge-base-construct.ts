@@ -149,9 +149,17 @@ export class KnowledgeBaseConstruct extends Construct {
     if (kb.advanced_parsing === false) {
       return undefined
     }
+    // Build the parsing model from the configured base model id. The library's
+    // newest constant is Claude 4 Sonnet, so we construct the model directly
+    // (works for any id, incl. Sonnet 5 once its Bedrock id is confirmed) and
+    // mark it cross-region + KB-capable, then wrap in a US inference profile.
+    const baseModel = new bedrock.BedrockFoundationModel(
+      kb.parsing_model || "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      { supportsCrossRegion: true, supportsKnowledgeBase: true }
+    )
     const parsingModel = bedrock.CrossRegionInferenceProfile.fromConfig({
       geoRegion: bedrock.CrossRegionInferenceProfileRegion.US,
-      model: bedrock.BedrockFoundationModel.ANTHROPIC_CLAUDE_4_SONNET_V1_0,
+      model: baseModel,
     })
     return bedrock.ParsingStrategy.foundationModel({ parsingModel })
   }
