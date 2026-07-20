@@ -511,10 +511,18 @@ def get_or_create_codebuild_project(
         "    commands:\n"
         '      - echo "Source dir contents:" && ls -la $CODEBUILD_SRC_DIR/\n'
         "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk bootstrap\n"
-        "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk deploy --all --require-approval never\n"
-        "  post_build:\n"
-        "    commands:\n"
-        "      - cd $CODEBUILD_SRC_DIR && python scripts/deploy-frontend.py\n"
+        # HDB RAG lanes only. `-c hdbRagOnly=true` skips FastMainStack entirely so
+        # the deployed FAST-stack (with its live KB + DynamoDB) is never synthesized
+        # or modified. Frontend deploy is intentionally omitted — FAST-stack owns it.
+        "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk deploy FAST-stack-hdb-rag "
+        "-c hdbRagOnly=true -c gatewayId=fast-stack-gateway-ijplaazmgy "
+        "-c gatewayRoleArn=arn:aws:iam::234951664938:role/"
+        "FAST-stack-FASTstackbackendGatewayRoleF3DAD122-2qlSrVVcYFxj "
+        "-c deployRagRuntime=true -c baseStackName=FAST-stack "
+        "-c userPoolId=us-east-1_4tn2PUP4f "
+        "-c userPoolClientId=36blqh3v42dhn7fdq5g6iidnao "
+        "-c memoryId=FASTstackFASTstackbackend82B4A665-FzJrvbGkhK "
+        "--require-approval never\n"
     )
 
     # Check if project already exists

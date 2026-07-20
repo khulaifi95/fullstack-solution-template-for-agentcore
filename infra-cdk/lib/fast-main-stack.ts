@@ -40,6 +40,10 @@ export class FastMainStack extends cdk.Stack {
       frontendUrl: this.amplifyHosting.amplifyUrl,
     })
 
+    // NOTE: The HDB retrieval lanes (OpenSearch KB + Glue/Athena) live in a
+    // SEPARATE stack (HdbRagStack) so they never modify the FAST baseline.
+    // See lib/hdb-rag-stack.ts.
+
     // Outputs
     new cdk.CfnOutput(this, "AmplifyAppId", {
       value: this.amplifyHosting.amplifyApp.appId,

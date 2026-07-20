@@ -1,0 +1,16 @@
+[
+  {
+    "name": "run_sql",
+    "description": "Run a single read-only SQL SELECT over the HDB/HCSA structured datasets (Amazon Athena, Presto/Trino syntax) and get rows back as JSON. Use for relational or aggregate questions — counts, sums, filters, and joins across projects, contractors, permits, and inspections — that document search cannot answer.\n\nDatabase: hdb_structured. Tables and key columns:\n- contractors(contractor_id, contractor_name, contact_number, company_address, contract_start_date, contractor_rating, sustainability_rating, financial_health_rating, engagement_status, number_of_completed_projects)\n- development_projects(project_id, project_name, contractor_id, project_start_date, scheduled_completion_date, actual_completion_date, project_status, estimated_cost_sgd, actual_cost_sgd)\n- permits(permit_id, assignment_id, permit_type, permit_category, approval_date, expiry_date, permit_status, permit_conditions, conditions_met, processing_fee_sgd)\n- inspections(inspection_id, case_id, inspection_date, inspection_type, inspector_company, inspection_result, defects_found, rectification_required, rectification_deadline, rectification_completed, follow_up_inspection_date, inspection_cost_sgd)\n\nJoin keys (note the differing column names):\n- development_projects.contractor_id = contractors.contractor_id\n- permits.assignment_id = development_projects.project_id\n- inspections.case_id = development_projects.project_id\n\nData-quality notes: text status columns have inconsistent casing/values (e.g. inspection_result is one of PASS/Pass/FAIL/Fail/PASS_WITH_ADVISORY/Conditional Pass) — always match case-insensitively, e.g. LOWER(inspection_result) LIKE '%fail%'. The contractors table may contain duplicate contractor_id values, so use COUNT(DISTINCT ...) where appropriate. Only SELECT/WITH statements are permitted.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sql": {
+          "type": "string",
+          "description": "A single read-only SQL SELECT (or WITH ... SELECT) statement in Athena/Presto syntax against the hdb_structured database."
+        }
+      },
+      "required": ["sql"]
+    }
+  }
+]
