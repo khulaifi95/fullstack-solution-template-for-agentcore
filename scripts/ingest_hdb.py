@@ -134,6 +134,12 @@ def upload_tables(
             continue
         df = pd.read_excel(src, sheet_name=0, engine="openpyxl")
         df.columns = [_snake(c) for c in df.columns]
+        # Coerce object (mixed/text) columns to string so Parquet type inference
+        # doesn't fail on columns like contact_number that mix ints and strings
+        # (e.g. "+65-8234-5671"). Genuine numeric columns keep their dtype.
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = df[col].astype("string")
         key = f"{table}/{table}.parquet"
         _log(f"  [{table}] {len(df)} rows, cols={list(df.columns)}")
         if dry_run:
