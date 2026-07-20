@@ -50,21 +50,43 @@ export class KnowledgeBaseConstruct extends Construct {
           removalPolicy: cdk.RemovalPolicy.RETAIN,
         })
 
+    // FM-based advanced parsing requires a supplemental data-storage location
+    // (where extracted images from multimodal docs are written). Only created
+    // when advanced parsing is enabled.
+    const parsing = this._buildParsing(kb)
+    const supplementalLocations = parsing
+      ? [
+          bedrock.SupplementalDataStorageLocation.s3({
+            uri: `s3://${this._supplementalBucket().bucketName}`,
+          }),
+        ]
+      : undefined
+
     const knowledgeBase = new bedrock.VectorKnowledgeBase(this, "KnowledgeBase", {
       embeddingsModel: this._embeddingModel(kb),
       vectorType: bedrock.VectorType.FLOATING_POINT,
+      supplementalDataStorageLocations: supplementalLocations,
       instruction:
         "Use this knowledge base to answer questions about HDB/HCSA policies, " +
         "SOPs, email correspondence, and financial/annual reports. Always cite " +
         "the source document and page.",
     })
 
+    // Grant the KB service role permission to read the parsing model's
+    // cross-region inference profile (GetInferenceProfile) + invoke it, and to
+    // write extracted images into the supplemental bucket.
+    if (parsing) {
+      parsing.profile.grantProfileUsage(knowledgeBase.role)
+      parsing.profile.grantInvoke(knowledgeBase.role)
+      this._supplementalBucket().grantReadWrite(knowledgeBase.role)
+    }
+
     new bedrock.S3DataSource(this, "DocsDataSource", {
       knowledgeBase,
       bucket: this.sourceBucket,
       dataSourceName: `hdb-docs-${(kb.chunking_strategy || "HIERARCHICAL").toLowerCase()}`,
       chunkingStrategy: this._chunkingStrategy(kb),
-      parsingStrategy: this._parsingStrategy(kb),
+      parsingStrategy: parsing?.strategy,
     })
 
     this.knowledgeBaseId = knowledgeBase.knowledgeBaseId
@@ -144,8 +166,13 @@ export class KnowledgeBaseConstruct extends Construct {
    * FM-based advanced parsing so tables/figures in the financial reports survive
    * chunking (protects page-level citation fidelity). Returns undefined when
    * advanced parsing is disabled, falling back to the default Bedrock parser.
+   *
+   * Returns both the ParsingStrategy (for the data source) and the inference
+   * profile (so the caller can grant the KB role GetInferenceProfile + Invoke).
    */
-  private _parsingStrategy(kb: KnowledgeBaseConfig): bedrock.ParsingStrategy | undefined {
+  private _buildParsing(
+    kb: KnowledgeBaseConfig
+  ): { strategy: bedrock.ParsingStrategy; profile: bedrock.CrossRegionInferenceProfile } | undefined {
     if (kb.advanced_parsing === false) {
       return undefined
     }
@@ -157,10 +184,28 @@ export class KnowledgeBaseConstruct extends Construct {
       kb.parsing_model || "anthropic.claude-sonnet-4-5-20250929-v1:0",
       { supportsCrossRegion: true, supportsKnowledgeBase: true }
     )
-    const parsingModel = bedrock.CrossRegionInferenceProfile.fromConfig({
+    const profile = bedrock.CrossRegionInferenceProfile.fromConfig({
       geoRegion: bedrock.CrossRegionInferenceProfileRegion.US,
       model: baseModel,
     })
-    return bedrock.ParsingStrategy.foundationModel({ parsingModel })
+    return {
+      strategy: bedrock.ParsingStrategy.foundationModel({ parsingModel: profile }),
+      profile,
+    }
+  }
+
+  /** Memoized supplemental-storage bucket for multimodal parsing output. */
+  private _supplementalBucketInstance?: s3.Bucket
+  private _supplementalBucket(): s3.Bucket {
+    if (!this._supplementalBucketInstance) {
+      this._supplementalBucketInstance = new s3.Bucket(this, "SupplementalBucket", {
+        enforceSSL: true,
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        encryption: s3.BucketEncryption.S3_MANAGED,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        autoDeleteObjects: true,
+      })
+    }
+    return this._supplementalBucketInstance
   }
 }
