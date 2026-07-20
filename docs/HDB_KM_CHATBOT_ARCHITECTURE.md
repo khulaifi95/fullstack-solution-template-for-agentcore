@@ -1,16 +1,16 @@
-# HCSA Knowledge-Management Chatbot — Architecture & Build Plan
+# HDB Knowledge-Management Chatbot — Architecture & Build Plan
 
 > **Status:** Design (pre-implementation). Built on the FAST (Fullstack AgentCore Solution
 > Template) baseline. This document is the reference for the "updated architecture" of the
-> HDB/HCSA prototype.
+> HDB prototype.
 
 ## 1. Context
 
-This is a tender-submission prototype for **HCSA** (Housing, Construction & Sustainability
-Authority — a fictional agency standing in for HDB; per the brief, HDB and HCSA are treated
-as one entity). The deliverable is an **AI-driven LLM knowledge-management chatbot** that lets
-officers retrieve information across a fragmented document estate instead of manually searching
-folders.
+This is a tender-submission prototype for **HDB** (in the mock brief, the agency is styled
+"HCSA — Housing, Construction & Sustainability Authority"; per the brief, HDB and HCSA are
+treated as one entity, so this document refers to it as HDB throughout). The deliverable is an
+**AI-driven LLM knowledge-management chatbot** that lets officers retrieve information across a
+fragmented document estate instead of manually searching folders.
 
 The system is **RAG-first** (retrieval-augmented generation), not a generic tool-calling
 assistant. It must answer natural-language questions grounded **only** in the provided corpus,
@@ -21,7 +21,9 @@ Instructions, Annex A).
 ### Knowledge base — four source "spaces"
 
 The mock dataset (and the sample-query mapping) organizes content into four spaces. These map
-directly onto our two retrieval lanes and onto the access-control model.
+directly onto our two retrieval lanes and onto the access-control model. The space identifiers
+below are kept verbatim from the dataset's `Query Mapping` sheet (they retain the `HCSA-` prefix)
+so the pipeline stays traceable to the source labels.
 
 | Space | Content | Format | Lane |
 |---|---|---|---|
