@@ -7,6 +7,7 @@ import { BackendConstruct } from "./backend-construct"
 import { AmplifyHostingConstruct } from "./amplify-hosting-construct"
 import { CognitoConstruct } from "./cognito-construct"
 import { KnowledgeBaseConstruct } from "./knowledge-base-construct"
+import { StructuredDataConstruct } from "./structured-data-construct"
 
 export interface FastAmplifyStackProps extends cdk.StackProps {
   config: AppConfig
@@ -17,6 +18,7 @@ export class FastMainStack extends cdk.Stack {
   public readonly backend: BackendConstruct
   public readonly cognito: CognitoConstruct
   public readonly knowledgeBase?: KnowledgeBaseConstruct
+  public readonly structuredData?: StructuredDataConstruct
 
   constructor(scope: Construct, id: string, props: FastAmplifyStackProps) {
     const description =
@@ -46,6 +48,14 @@ export class FastMainStack extends cdk.Stack {
     // Created only when config.yaml defines a knowledge_base section.
     if (props.config.knowledge_base) {
       this.knowledgeBase = new KnowledgeBaseConstruct(this, `${id}-kb`, {
+        config: props.config,
+      })
+    }
+
+    // Step 4: Optional structured retrieval lane (Glue catalog + Athena).
+    // Created only when config.yaml defines a structured_data section.
+    if (props.config.structured_data) {
+      this.structuredData = new StructuredDataConstruct(this, `${id}-structured`, {
         config: props.config,
       })
     }

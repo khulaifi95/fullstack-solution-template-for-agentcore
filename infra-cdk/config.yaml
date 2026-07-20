@@ -50,3 +50,12 @@ backend:
 #   overlap_percentage: 20                  # FIXED_SIZE overlap %
 #   advanced_parsing: true                  # FM-based parsing so report tables survive chunking
 #   # parsing_model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+
+# Optional: Structured retrieval lane (Glue Data Catalog + Athena text-to-SQL) over
+# the four Parquet datasets staged by scripts/ingest_hdb.py. Uncomment to enable.
+# After deploy + ingestion, run the Glue crawler once (name is in stack outputs):
+#   aws glue start-crawler --name <GlueCrawlerName>
+# structured_data:
+#   # tables_bucket_name: my-hdb-tables   # omit to have CDK create + export one
+#   database_name: hdb_structured
+#   # workgroup_name: FAST-stack-hdb

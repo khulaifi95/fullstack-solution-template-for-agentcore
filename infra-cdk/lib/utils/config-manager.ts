@@ -58,6 +58,24 @@ export interface AppConfig {
   }
   /** Knowledge Base (RAG) configuration. Omit to skip the unstructured lane. */
   knowledge_base?: KnowledgeBaseConfig
+  /** Structured data (Glue + Athena) configuration. Omit to skip the structured lane. */
+  structured_data?: StructuredDataConfig
+}
+
+/**
+ * Structured retrieval lane configuration (Glue catalog + Athena text-to-SQL over
+ * the four Parquet datasets staged by scripts/ingest_hdb.py).
+ */
+export interface StructuredDataConfig {
+  /**
+   * S3 bucket holding the Parquet tables (per-table prefixes). If omitted, a
+   * bucket is created and its name exported for ingest_hdb.py --tables-bucket.
+   */
+  tables_bucket_name?: string
+  /** Glue database name. Defaults to "hdb_structured". */
+  database_name?: string
+  /** Athena workgroup name. Defaults to "<stack_name_base>-hdb". */
+  workgroup_name?: string
 }
 
 /** Chunking strategy for the Knowledge Base data source. */
@@ -188,6 +206,13 @@ export class ConfigManager {
           ltm_relevance_score: parsedConfig.backend?.ltm_relevance_score ?? 0.3,
         },
         knowledge_base: this._normalizeKnowledgeBase(parsedConfig.knowledge_base),
+        structured_data: parsedConfig.structured_data
+          ? {
+              tables_bucket_name: parsedConfig.structured_data.tables_bucket_name,
+              database_name: parsedConfig.structured_data.database_name || "hdb_structured",
+              workgroup_name: parsedConfig.structured_data.workgroup_name,
+            }
+          : undefined,
       }
     } catch (error) {
       throw new Error(`Failed to parse configuration file ${configPath}: ${error}`)
