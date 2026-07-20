@@ -516,6 +516,8 @@ def get_or_create_codebuild_project(
         # or modified. Frontend deploy is intentionally omitted — FAST-stack owns it.
         "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk deploy FAST-stack-hdb-rag "
         "-c hdbRagOnly=true -c gatewayId=fast-stack-gateway-ijplaazmgy "
+        "-c gatewayRoleArn=arn:aws:iam::234951664938:role/"
+        "FAST-stack-FASTstackbackendGatewayRoleF3DAD122-2qlSrVVcYFxj "
         "--require-approval never\n"
     )
 

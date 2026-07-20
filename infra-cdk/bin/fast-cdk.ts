@@ -41,9 +41,11 @@ if (props.knowledge_base || props.structured_data) {
   // gateway (referenced by id — FastMainStack is never redeployed). Provide the
   // gateway id via `-c gatewayId=<id>`; omit to deploy the lanes without tools.
   const gatewayId = app.node.tryGetContext("gatewayId") as string | undefined
+  const gatewayRoleArn = app.node.tryGetContext("gatewayRoleArn") as string | undefined
   new HdbRagStack(app, `${props.stack_name_base}-hdb-rag`, {
     config: props,
     gatewayId,
+    gatewayRoleArn,
     env,
   })
 }

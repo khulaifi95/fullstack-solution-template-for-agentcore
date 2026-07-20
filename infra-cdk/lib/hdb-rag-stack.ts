@@ -19,6 +19,12 @@ export interface HdbRagStackProps extends cdk.StackProps {
    * `-c gatewayId=<id>` or the config.
    */
   gatewayId?: string
+  /**
+   * ARN of the existing gateway's execution role (owned by FAST-stack). Required
+   * for the gateway targets to validate — AgentCore checks that this role can
+   * invoke the tool Lambdas. Passed via `-c gatewayRoleArn=<arn>`.
+   */
+  gatewayRoleArn?: string
 }
 
 /**
@@ -35,6 +41,7 @@ export interface HdbRagStackProps extends cdk.StackProps {
 export class HdbRagStack extends cdk.Stack {
   public readonly knowledgeBase?: KnowledgeBaseConstruct
   public readonly structuredData?: StructuredDataConstruct
+  private _gatewayRole?: iam.IRole
 
   constructor(scope: Construct, id: string, props: HdbRagStackProps) {
     super(scope, id, {
@@ -58,13 +65,21 @@ export class HdbRagStack extends cdk.Stack {
     // gateway (referenced by id — we never redeploy FastMainStack). Skipped when
     // no gatewayId is supplied.
     if (props.gatewayId) {
-      this._addGatewayTools(props.gatewayId)
+      this._addGatewayTools(props.gatewayId, props.gatewayRoleArn)
     }
   }
 
   /** Create the two tool Lambdas and attach them to the existing gateway. */
-  private _addGatewayTools(gatewayId: string): void {
+  private _addGatewayTools(gatewayId: string, gatewayRoleArn?: string): void {
     const toolsRoot = path.join(__dirname, "..", "..", "gateway", "tools")
+
+    // Import the existing gateway execution role (owned by FAST-stack) so we can
+    // grant it invoke permission on our tool Lambdas. mutable:true lets CDK add a
+    // policy to the role FROM THIS STACK (a separate policy resource, removed when
+    // this stack is destroyed) — it does not redeploy or rewrite FastMainStack.
+    this._gatewayRole = gatewayRoleArn
+      ? iam.Role.fromRoleArn(this, "ImportedGatewayRole", gatewayRoleArn, { mutable: true })
+      : undefined
 
     if (this.knowledgeBase) {
       const retrieveFn = new lambda.Function(this, "RetrieveToolLambda", {
@@ -142,10 +157,16 @@ export class HdbRagStack extends cdk.Stack {
       inputSchema: unknown
     }>
 
+    // Resource-based grant to the service principal (defence in depth)...
     fn.addPermission(`${name}-gw-invoke`, {
       principal: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
       action: "lambda:InvokeFunction",
     })
+    // ...and the identity-policy grant AgentCore actually validates: the gateway
+    // EXECUTION ROLE must be allowed to invoke this Lambda.
+    if (this._gatewayRole) {
+      fn.grantInvoke(this._gatewayRole)
+    }
 
     new agentcore.CfnGatewayTarget(this, `${name}-target`, {
       gatewayIdentifier: gatewayId,
