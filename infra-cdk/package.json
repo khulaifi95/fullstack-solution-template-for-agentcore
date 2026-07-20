@@ -23,6 +23,7 @@
     "@aws-cdk/aws-amplify-alpha": "^2.260.0-alpha.0",
     "@aws-cdk/aws-lambda-python-alpha": "^2.260.0-alpha.0",
     "@aws-sdk/client-bedrock-agentcore": "^3.1076.0",
+    "@cdklabs/generative-ai-cdk-constructs": "^0.1.318",
     "aws-cdk-lib": "^2.260.0",
     "constructs": "^10.6.0",
     "yaml": "^2.9.0"

@@ -56,6 +56,43 @@ export interface AppConfig {
      */
     ltm_relevance_score: number
   }
+  /** Knowledge Base (RAG) configuration. Omit to skip the unstructured lane. */
+  knowledge_base?: KnowledgeBaseConfig
+}
+
+/** Chunking strategy for the Knowledge Base data source. */
+export type ChunkingStrategy = "FIXED_SIZE" | "SEMANTIC" | "HIERARCHICAL" | "NONE"
+
+/**
+ * Bedrock Knowledge Base configuration for the unstructured retrieval lane.
+ *
+ * NOTE: The chunking strategy is IMMUTABLE once a data source is created. Changing
+ * it requires creating a new data source (or KB) and re-ingesting — see the
+ * "versioned re-index + cutover" model in HDB_KM_CHATBOT_ARCHITECTURE.md.
+ */
+export interface KnowledgeBaseConfig {
+  /**
+   * S3 bucket holding the raw source documents (per-space prefixes). If omitted,
+   * a bucket is created and its name is exported for the ingest_hdb.py script.
+   */
+  source_bucket_name?: string
+  /** Embedding model ID. Defaults to amazon.titan-embed-text-v2:0. */
+  embedding_model?: string
+  /** Embedding output dimensions (Titan V2 supports 1024/512/256). Defaults to 1024. */
+  embedding_dimensions?: number
+  /** Chunking strategy. Defaults to HIERARCHICAL (best for structured policy/report PDFs). */
+  chunking_strategy?: ChunkingStrategy
+  /** Max tokens per chunk for FIXED_SIZE / child level of HIERARCHICAL. Defaults to 300. */
+  max_tokens?: number
+  /** Overlap percentage for FIXED_SIZE (0-99). Defaults to 20. */
+  overlap_percentage?: number
+  /**
+   * Enable FM-based advanced parsing so tables/figures in reports survive chunking.
+   * Defaults to true. Uses parsing_model for the parse step.
+   */
+  advanced_parsing?: boolean
+  /** Foundation model ID used for advanced parsing. Defaults to a Claude model. */
+  parsing_model?: string
 }
 
 export class ConfigManager {
@@ -150,9 +187,39 @@ export class ConfigManager {
           ltm_top_k: parsedConfig.backend?.ltm_top_k ?? 10,
           ltm_relevance_score: parsedConfig.backend?.ltm_relevance_score ?? 0.3,
         },
+        knowledge_base: this._normalizeKnowledgeBase(parsedConfig.knowledge_base),
       }
     } catch (error) {
       throw new Error(`Failed to parse configuration file ${configPath}: ${error}`)
+    }
+  }
+
+  /**
+   * Normalize the optional knowledge_base section, applying defaults. Returns
+   * undefined when the section is absent so the unstructured lane stays opt-in.
+   */
+  private _normalizeKnowledgeBase(
+    kb?: Partial<KnowledgeBaseConfig>
+  ): KnowledgeBaseConfig | undefined {
+    if (!kb) {
+      return undefined
+    }
+    const strategy = (kb.chunking_strategy || "HIERARCHICAL") as ChunkingStrategy
+    const valid: ChunkingStrategy[] = ["FIXED_SIZE", "SEMANTIC", "HIERARCHICAL", "NONE"]
+    if (!valid.includes(strategy)) {
+      throw new Error(
+        `Invalid knowledge_base.chunking_strategy '${strategy}'. Must be one of ${valid.join(", ")}.`
+      )
+    }
+    return {
+      source_bucket_name: kb.source_bucket_name,
+      embedding_model: kb.embedding_model || "amazon.titan-embed-text-v2:0",
+      embedding_dimensions: kb.embedding_dimensions ?? 1024,
+      chunking_strategy: strategy,
+      max_tokens: kb.max_tokens ?? 300,
+      overlap_percentage: kb.overlap_percentage ?? 20,
+      advanced_parsing: kb.advanced_parsing !== false,
+      parsing_model: kb.parsing_model || "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     }
   }
 
