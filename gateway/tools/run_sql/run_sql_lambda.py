@@ -119,9 +119,11 @@ def handler(event, context):
             logger.error("Unexpected tool name: %s", tool_name)
             return {"error": f"This Lambda only supports 'run_sql', received: {tool_name}"}
 
-        sql = event.get("sql", "")
+        # Accept `sql` (canonical) or `query` (common alias the model may emit,
+        # by analogy with the retrieve tool) so a param-name slip doesn't fail.
+        sql = event.get("sql") or event.get("query") or ""
         if not sql:
-            return {"error": "Missing required argument: sql"}
+            return {"error": "Missing required argument: sql (the SQL SELECT statement)"}
 
         out = run_sql(sql)
         return {"content": [{"type": "text", "text": json.dumps(out)}]}
