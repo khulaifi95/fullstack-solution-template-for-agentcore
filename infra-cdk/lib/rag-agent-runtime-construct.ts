@@ -171,14 +171,16 @@ export class RagAgentRuntimeConstruct extends Construct {
     }
 
     // Read the machine-client secret (for the direct-Cognito M2M token call).
-    // The secret is owned by FAST-stack; grant read by ARN pattern.
+    // The secret is owned by FAST-stack and named "/<base>/machine_client_secret"
+    // (note the LEADING SLASH) with a random Secrets Manager suffix. Match that
+    // exact name pattern — a grant on "<base>*" (no slash) does not match.
     agentRole.addToPolicy(
       new iam.PolicyStatement({
         sid: "MachineClientSecretRead",
         effect: iam.Effect.ALLOW,
         actions: ["secretsmanager:GetSecretValue"],
         resources: [
-          `arn:aws:secretsmanager:${stack.region}:${stack.account}:secret:${base}*`,
+          `arn:aws:secretsmanager:${stack.region}:${stack.account}:secret:/${base}/*`,
         ],
       })
     )
