@@ -42,10 +42,15 @@ if (props.knowledge_base || props.structured_data) {
   // gateway id via `-c gatewayId=<id>`; omit to deploy the lanes without tools.
   const gatewayId = app.node.tryGetContext("gatewayId") as string | undefined
   const gatewayRoleArn = app.node.tryGetContext("gatewayRoleArn") as string | undefined
+  const deployRagRuntime = app.node.tryGetContext("deployRagRuntime") === "true"
   new HdbRagStack(app, `${props.stack_name_base}-hdb-rag`, {
     config: props,
     gatewayId,
     gatewayRoleArn,
+    deployRagRuntime,
+    baseStackName: (app.node.tryGetContext("baseStackName") as string) || props.stack_name_base,
+    userPoolId: app.node.tryGetContext("userPoolId") as string | undefined,
+    userPoolClientId: app.node.tryGetContext("userPoolClientId") as string | undefined,
     env,
   })
 }

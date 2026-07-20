@@ -9,6 +9,7 @@ import { Construct } from "constructs"
 import { AppConfig } from "./utils/config-manager"
 import { KnowledgeBaseConstruct } from "./knowledge-base-construct"
 import { StructuredDataConstruct } from "./structured-data-construct"
+import { RagAgentRuntimeConstruct } from "./rag-agent-runtime-construct"
 
 export interface HdbRagStackProps extends cdk.StackProps {
   config: AppConfig
@@ -25,6 +26,18 @@ export interface HdbRagStackProps extends cdk.StackProps {
    * invoke the tool Lambdas. Passed via `-c gatewayRoleArn=<arn>`.
    */
   gatewayRoleArn?: string
+  /**
+   * When set, also stand up a SEPARATE AgentCore Runtime running the HDB RAG
+   * orchestrator agent, reusing the base FAST stack's shared gateway/OAuth.
+   * Requires the Cognito values below. Enabled via `-c deployRagRuntime=true`.
+   */
+  deployRagRuntime?: boolean
+  /** Base FAST stack name whose shared gateway/OAuth the runtime reuses. */
+  baseStackName?: string
+  /** Cognito user pool id (FAST-stack) for the runtime JWT authorizer. */
+  userPoolId?: string
+  /** Cognito app client id (FAST-stack) allowed to invoke the runtime. */
+  userPoolClientId?: string
 }
 
 /**
@@ -66,6 +79,22 @@ export class HdbRagStack extends cdk.Stack {
     // no gatewayId is supplied.
     if (props.gatewayId) {
       this._addGatewayTools(props.gatewayId, props.gatewayRoleArn)
+    }
+
+    // Optional: a separate AgentCore Runtime running the RAG orchestrator agent.
+    if (props.deployRagRuntime) {
+      if (!props.userPoolId || !props.userPoolClientId) {
+        throw new Error(
+          "deployRagRuntime requires userPoolId and userPoolClientId (pass -c userPoolId=... -c userPoolClientId=...)"
+        )
+      }
+      new RagAgentRuntimeConstruct(this, `${id}-runtime`, {
+        config: props.config,
+        baseStackName: props.baseStackName || props.config.stack_name_base,
+        userPoolId: props.userPoolId,
+        userPoolClientId: props.userPoolClientId,
+        knowledgeBaseArn: this.knowledgeBase?.knowledgeBaseArn,
+      })
     }
   }
 

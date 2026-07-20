@@ -518,6 +518,9 @@ def get_or_create_codebuild_project(
         "-c hdbRagOnly=true -c gatewayId=fast-stack-gateway-ijplaazmgy "
         "-c gatewayRoleArn=arn:aws:iam::234951664938:role/"
         "FAST-stack-FASTstackbackendGatewayRoleF3DAD122-2qlSrVVcYFxj "
+        "-c deployRagRuntime=true -c baseStackName=FAST-stack "
+        "-c userPoolId=us-east-1_4tn2PUP4f "
+        "-c userPoolClientId=36blqh3v42dhn7fdq5g6iidnao "
         "--require-approval never\n"
     )
 
