@@ -41,21 +41,21 @@ backend:
 #
 # NOTE: chunking_strategy is IMMUTABLE once the data source is created. Changing it
 # creates a new data source and re-ingests (see docs/HDB_KM_CHATBOT_ARCHITECTURE.md).
-# knowledge_base:
-#   # source_bucket_name: my-hdb-raw-docs   # omit to have CDK create + export one
-#   embedding_model: amazon.titan-embed-text-v2:0
-#   embedding_dimensions: 1024              # 1024 (default) | 512 | 256
-#   chunking_strategy: HIERARCHICAL         # HIERARCHICAL | SEMANTIC | FIXED_SIZE | NONE
-#   max_tokens: 300                         # child chunk size (HIERARCHICAL) / chunk size (FIXED_SIZE)
-#   overlap_percentage: 20                  # FIXED_SIZE overlap %
-#   advanced_parsing: true                  # FM-based parsing so report tables survive chunking
-#   # parsing_model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+knowledge_base:
+  # source_bucket_name: my-hdb-raw-docs   # omit to have CDK create + export one
+  embedding_model: amazon.titan-embed-text-v2:0
+  embedding_dimensions: 1024              # 1024 (default) | 512 | 256
+  chunking_strategy: HIERARCHICAL         # HIERARCHICAL | SEMANTIC | FIXED_SIZE | NONE
+  max_tokens: 300                         # child chunk size (HIERARCHICAL) / chunk size (FIXED_SIZE)
+  overlap_percentage: 20                  # FIXED_SIZE overlap %
+  advanced_parsing: true                  # FM-based parsing so report tables survive chunking
+  # parsing_model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
 
-# Optional: Structured retrieval lane (Glue Data Catalog + Athena text-to-SQL) over
-# the four Parquet datasets staged by scripts/ingest_hdb.py. Uncomment to enable.
+# Structured retrieval lane (Glue Data Catalog + Athena text-to-SQL) over the four
+# Parquet datasets staged by scripts/ingest_hdb.py.
 # After deploy + ingestion, run the Glue crawler once (name is in stack outputs):
 #   aws glue start-crawler --name <GlueCrawlerName>
-# structured_data:
-#   # tables_bucket_name: my-hdb-tables   # omit to have CDK create + export one
-#   database_name: hdb_structured
-#   # workgroup_name: FAST-stack-hdb
+structured_data:
+  # tables_bucket_name: my-hdb-tables   # omit to have CDK create + export one
+  database_name: hdb_structured
+  # workgroup_name: FAST-stack-hdb
