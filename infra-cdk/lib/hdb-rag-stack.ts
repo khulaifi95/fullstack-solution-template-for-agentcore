@@ -38,6 +38,8 @@ export interface HdbRagStackProps extends cdk.StackProps {
   userPoolId?: string
   /** Cognito app client id (FAST-stack) allowed to invoke the runtime. */
   userPoolClientId?: string
+  /** Existing AgentCore Memory id to reuse for the RAG runtime (FAST-stack's). */
+  memoryId?: string
 }
 
 /**
@@ -94,6 +96,7 @@ export class HdbRagStack extends cdk.Stack {
         userPoolId: props.userPoolId,
         userPoolClientId: props.userPoolClientId,
         knowledgeBaseArn: this.knowledgeBase?.knowledgeBaseArn,
+        memoryId: props.memoryId,
       })
     }
   }

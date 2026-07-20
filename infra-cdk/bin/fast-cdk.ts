@@ -51,6 +51,7 @@ if (props.knowledge_base || props.structured_data) {
     baseStackName: (app.node.tryGetContext("baseStackName") as string) || props.stack_name_base,
     userPoolId: app.node.tryGetContext("userPoolId") as string | undefined,
     userPoolClientId: app.node.tryGetContext("userPoolClientId") as string | undefined,
+    memoryId: app.node.tryGetContext("memoryId") as string | undefined,
     env,
   })
 }

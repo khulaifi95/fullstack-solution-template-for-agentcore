@@ -22,6 +22,13 @@ export interface RagAgentRuntimeConstructProps {
   userPoolClientId: string
   /** KB arn so the agent's execution role may call bedrock:Retrieve directly if needed. */
   knowledgeBaseArn?: string
+  /**
+   * Reuse an EXISTING AgentCore Memory (e.g. FAST-stack's) by id, instead of
+   * creating a new one. Strongly recommended: creating a fresh semantic-strategy
+   * Memory can exceed CloudFormation's stabilization window ("NotStabilized").
+   * Pass the memory id (not arn). When omitted, a new Memory is created.
+   */
+  memoryId?: string
 }
 
 /**
@@ -61,20 +68,29 @@ export class RagAgentRuntimeConstruct extends Construct {
     // Execution role: base AgentCore permissions + the extras the agent needs.
     const agentRole = new AgentCoreRole(this, "RagAgentRole")
 
-    // Own Memory resource (short-term; semantic strategy defined but only used
-    // when USE_LONG_TERM_MEMORY=true).
-    const memory = new agentcore.Memory(this, "RagAgentMemory", {
-      memoryName: cdk.Names.uniqueResourceName(this, { maxLength: 48 }),
-      expirationDuration: cdk.Duration.days(30),
-      description: `Short-term memory for ${base} HDB RAG agent`,
-      memoryStrategies: [
-        agentcore.MemoryStrategy.usingSemantic({
-          strategyName: "FactExtractor",
-          namespaces: ["/facts/{actorId}"],
-        }),
-      ],
-      executionRole: agentRole,
-    })
+    // Memory: reuse an existing one by id when provided (recommended — avoids the
+    // flaky new-Memory stabilization), otherwise create a fresh one.
+    let memoryId: string
+    let memoryArnForPolicy: string
+    if (props.memoryId) {
+      memoryId = props.memoryId
+      memoryArnForPolicy = `arn:aws:bedrock-agentcore:${stack.region}:${stack.account}:memory/${props.memoryId}`
+    } else {
+      const memory = new agentcore.Memory(this, "RagAgentMemory", {
+        memoryName: cdk.Names.uniqueResourceName(this, { maxLength: 48 }),
+        expirationDuration: cdk.Duration.days(30),
+        description: `Short-term memory for ${base} HDB RAG agent`,
+        memoryStrategies: [
+          agentcore.MemoryStrategy.usingSemantic({
+            strategyName: "FactExtractor",
+            namespaces: ["/facts/{actorId}"],
+          }),
+        ],
+        executionRole: agentRole,
+      })
+      memoryId = memory.memoryId
+      memoryArnForPolicy = memory.memoryArn
+    }
 
     agentRole.addToPolicy(
       new iam.PolicyStatement({
@@ -86,7 +102,7 @@ export class RagAgentRuntimeConstruct extends Construct {
           "bedrock-agentcore:ListEvents",
           "bedrock-agentcore:RetrieveMemoryRecords",
         ],
-        resources: [memory.memoryArn],
+        resources: [memoryArnForPolicy],
       })
     )
 
@@ -184,7 +200,7 @@ export class RagAgentRuntimeConstruct extends Construct {
       environmentVariables: {
         AWS_REGION: stack.region,
         AWS_DEFAULT_REGION: stack.region,
-        MEMORY_ID: memory.memoryId,
+        MEMORY_ID: memoryId,
         STACK_NAME: base,
         GATEWAY_CREDENTIAL_PROVIDER_NAME: `${base}-runtime-gateway-auth`,
         USE_LONG_TERM_MEMORY: props.config.backend.use_long_term_memory ? "true" : "false",

@@ -521,6 +521,7 @@ def get_or_create_codebuild_project(
         "-c deployRagRuntime=true -c baseStackName=FAST-stack "
         "-c userPoolId=us-east-1_4tn2PUP4f "
         "-c userPoolClientId=36blqh3v42dhn7fdq5g6iidnao "
+        "-c memoryId=FASTstackFASTstackbackend82B4A665-FzJrvbGkhK "
         "--require-approval never\n"
     )
 
