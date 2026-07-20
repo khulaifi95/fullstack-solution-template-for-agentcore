@@ -1,4 +1,10 @@
 import * as cdk from "aws-cdk-lib"
+import * as fs from "fs"
+import * as path from "path"
+import * as lambda from "aws-cdk-lib/aws-lambda"
+import * as logs from "aws-cdk-lib/aws-logs"
+import * as iam from "aws-cdk-lib/aws-iam"
+import * as agentcore from "aws-cdk-lib/aws-bedrockagentcore"
 import { Construct } from "constructs"
 import { AppConfig } from "./utils/config-manager"
 import { KnowledgeBaseConstruct } from "./knowledge-base-construct"
@@ -6,6 +12,13 @@ import { StructuredDataConstruct } from "./structured-data-construct"
 
 export interface HdbRagStackProps extends cdk.StackProps {
   config: AppConfig
+  /**
+   * Id of the EXISTING AgentCore Gateway (in FAST-stack) to attach the
+   * retrieve / run_sql tool targets to. When omitted, the tools' Lambdas are
+   * still created but not registered as gateway targets. Pass via
+   * `-c gatewayId=<id>` or the config.
+   */
+  gatewayId?: string
 }
 
 /**
@@ -40,5 +53,121 @@ export class HdbRagStack extends cdk.Stack {
         config: props.config,
       })
     }
+
+    // Register the retrieve / run_sql tools as targets on the EXISTING FAST-stack
+    // gateway (referenced by id — we never redeploy FastMainStack). Skipped when
+    // no gatewayId is supplied.
+    if (props.gatewayId) {
+      this._addGatewayTools(props.gatewayId)
+    }
+  }
+
+  /** Create the two tool Lambdas and attach them to the existing gateway. */
+  private _addGatewayTools(gatewayId: string): void {
+    const toolsRoot = path.join(__dirname, "..", "..", "gateway", "tools")
+
+    if (this.knowledgeBase) {
+      const retrieveFn = new lambda.Function(this, "RetrieveToolLambda", {
+        runtime: lambda.Runtime.PYTHON_3_13,
+        handler: "retrieve_lambda.handler",
+        code: lambda.Code.fromAsset(path.join(toolsRoot, "retrieve")), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        timeout: cdk.Duration.seconds(30),
+        environment: { KNOWLEDGE_BASE_ID: this.knowledgeBase.knowledgeBaseId },
+        logGroup: new logs.LogGroup(this, "RetrieveToolLogGroup", {
+          retention: logs.RetentionDays.ONE_WEEK,
+          removalPolicy: cdk.RemovalPolicy.DESTROY,
+        }),
+      })
+      retrieveFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["bedrock:Retrieve"],
+          resources: [this.knowledgeBase.knowledgeBaseArn],
+        })
+      )
+      this._attachTarget(gatewayId, "hdb-retrieve", retrieveFn, path.join(toolsRoot, "retrieve", "tool_spec.json"))
+    }
+
+    if (this.structuredData) {
+      const sd = this.structuredData
+      const sqlFn = new lambda.Function(this, "RunSqlToolLambda", {
+        runtime: lambda.Runtime.PYTHON_3_13,
+        handler: "run_sql_lambda.handler",
+        code: lambda.Code.fromAsset(path.join(toolsRoot, "run_sql")), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        timeout: cdk.Duration.seconds(30),
+        environment: {
+          ATHENA_DATABASE: sd.databaseName,
+          ATHENA_WORKGROUP: sd.workgroupName,
+        },
+        logGroup: new logs.LogGroup(this, "RunSqlToolLogGroup", {
+          retention: logs.RetentionDays.ONE_WEEK,
+          removalPolicy: cdk.RemovalPolicy.DESTROY,
+        }),
+      })
+      // Athena + Glue read + result-bucket write for query execution.
+      sqlFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            "athena:StartQueryExecution",
+            "athena:GetQueryExecution",
+            "athena:GetQueryResults",
+            "athena:StopQueryExecution",
+            "glue:GetTable",
+            "glue:GetTables",
+            "glue:GetDatabase",
+            "glue:GetPartitions",
+          ],
+          resources: ["*"],
+        })
+      )
+      sd.tablesBucket.grantRead(sqlFn)
+      sd.resultsBucket.grantReadWrite(sqlFn)
+      this._attachTarget(gatewayId, "hdb-run-sql", sqlFn, path.join(toolsRoot, "run_sql", "tool_spec.json"))
+    }
+  }
+
+  /**
+   * Attach one Lambda tool as an MCP target on the existing gateway, using the
+   * tool_spec.json as the inline tool schema. Grants the gateway service
+   * principal permission to invoke the Lambda.
+   */
+  private _attachTarget(
+    gatewayId: string,
+    name: string,
+    fn: lambda.Function,
+    specPath: string
+  ): void {
+    const spec = JSON.parse(fs.readFileSync(specPath, "utf-8")) as Array<{
+      name: string
+      description: string
+      inputSchema: unknown
+    }>
+
+    fn.addPermission(`${name}-gw-invoke`, {
+      principal: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+    })
+
+    new agentcore.CfnGatewayTarget(this, `${name}-target`, {
+      gatewayIdentifier: gatewayId,
+      name,
+      description: `HDB ${name} tool`,
+      targetConfiguration: {
+        mcp: {
+          lambda: {
+            lambdaArn: fn.functionArn,
+            toolSchema: {
+              inlinePayload: spec.map((t) => ({
+                name: t.name,
+                description: t.description,
+                inputSchema: t.inputSchema as agentcore.CfnGatewayTarget.SchemaDefinitionProperty,
+              })),
+            },
+          },
+        },
+      },
+      credentialProviderConfigurations: [
+        { credentialProviderType: "GATEWAY_IAM_ROLE" },
+      ],
+    })
   }
 }

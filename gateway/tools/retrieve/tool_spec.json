@@ -1,0 +1,25 @@
+[
+  {
+    "name": "retrieve",
+    "description": "Search the HDB/HCSA knowledge base (policies, SOPs, emails, and financial/annual reports) for passages relevant to a natural-language query. Returns matching text chunks each with its source document, space, and page number for citation. Use this for any question answerable from documents rather than structured tabular data.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Natural-language query describing the information needed."
+        },
+        "spaces": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional. Restrict retrieval to these spaces (e.g. HCSA-SOPs-and-Policies, HCSA-Email-Repository, HCSA-Reports). Omit to search all spaces the caller may access."
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Optional. Maximum number of chunks to return (default 5)."
+        }
+      },
+      "required": ["query"]
+    }
+  }
+]

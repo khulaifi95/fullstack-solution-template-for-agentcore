@@ -515,7 +515,8 @@ def get_or_create_codebuild_project(
         # the deployed FAST-stack (with its live KB + DynamoDB) is never synthesized
         # or modified. Frontend deploy is intentionally omitted — FAST-stack owns it.
         "      - cd $CODEBUILD_SRC_DIR/infra-cdk && cdk deploy FAST-stack-hdb-rag "
-        "-c hdbRagOnly=true --require-approval never\n"
+        "-c hdbRagOnly=true -c gatewayId=fast-stack-gateway-ijplaazmgy "
+        "--require-approval never\n"
     )
 
     # Check if project already exists

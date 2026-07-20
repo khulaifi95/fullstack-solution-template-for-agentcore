@@ -37,8 +37,13 @@ if (!hdbRagOnly) {
 // alongside FAST without modifying it. Deploy explicitly:
 //   cdk deploy <stack_name_base>-hdb-rag
 if (props.knowledge_base || props.structured_data) {
+  // Optionally attach the retrieve / run_sql tools to the EXISTING FAST-stack
+  // gateway (referenced by id — FastMainStack is never redeployed). Provide the
+  // gateway id via `-c gatewayId=<id>`; omit to deploy the lanes without tools.
+  const gatewayId = app.node.tryGetContext("gatewayId") as string | undefined
   new HdbRagStack(app, `${props.stack_name_base}-hdb-rag`, {
     config: props,
+    gatewayId,
     env,
   })
 }
